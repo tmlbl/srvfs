@@ -1,40 +1,13 @@
 use fuser::{Filesystem, FileAttr, Request, 
     ReplyEntry, ReplyDirectory, ReplyAttr, FileType, MountOption};
 use std::ffi::OsStr;
+use std::path::Path;
 use std::time::{Duration, UNIX_EPOCH};
 use std::fs;
 
+mod vfs;
+
 const TTL: Duration = Duration::from_secs(1);
-
-trait VFile {
-    fn attr(&self) -> FileAttr;
-}
-
-struct VPubFile {
-    ino: u64
-}
-
-impl VFile for VPubFile {
-    fn attr(&self) -> FileAttr {
-        FileAttr {
-            ino: self.ino,
-            size: 0,
-            blocks: 0,
-            atime: UNIX_EPOCH,
-            mtime: UNIX_EPOCH,
-            ctime: UNIX_EPOCH,
-            crtime: UNIX_EPOCH,
-            kind: FileType::RegularFile,
-            perm: 0o755,
-            nlink: 2,
-            uid: 501,
-            gid: 20,
-            rdev: 0,
-            flags: 0,
-            blksize: 512,
-        }
-    }
-}
 
 struct SrvFS {
 
@@ -70,7 +43,8 @@ impl SrvFS {
 
 impl Filesystem for SrvFS {
     fn lookup(&mut self, _req: &Request, parent: u64, name: &OsStr, reply: ReplyEntry) {
-       reply.error(libc::ENOENT); 
+        println!("LOOKUP {}", name.to_str().unwrap());
+        reply.error(libc::ENOENT); 
     }
 
     fn getattr(&mut self, _req: &Request, ino: u64, reply: ReplyAttr) {
