@@ -10,56 +10,66 @@ mod vfs;
 const TTL: Duration = Duration::from_secs(1);
 
 struct SrvFS {
-
+    v: vfs::VFS,
 }
 
 impl SrvFS {
-    fn attr_for_ino(&mut self, ino: u64) -> Option<FileAttr> {
-        let mut attr = FileAttr {
-            ino,
-            size: 0,
-            blocks: 0,
-            atime: UNIX_EPOCH,
-            mtime: UNIX_EPOCH,
-            ctime: UNIX_EPOCH,
-            crtime: UNIX_EPOCH,
-            kind: FileType::Directory,
-            perm: 0o755,
-            nlink: 2,
-            uid: 501,
-            gid: 20,
-            rdev: 0,
-            flags: 0,
-            blksize: 512,
-        };
-
-        if ino == 1 {
-            return Some(attr)
+    fn new() -> SrvFS {
+        SrvFS {
+            v: vfs::VFS::new()
         }
-
-        return None;
     }
 }
 
 impl Filesystem for SrvFS {
     fn lookup(&mut self, _req: &Request, parent: u64, name: &OsStr, reply: ReplyEntry) {
         println!("LOOKUP {}", name.to_str().unwrap());
-        reply.error(libc::ENOENT); 
+        match self.v.lookup(parent, name.to_str().unwrap()) {
+            None => reply.error(libc::ENOENT),
+            Some(attr) => reply.entry(&TTL, &attr, 1),
+        }
     }
 
     fn getattr(&mut self, _req: &Request, ino: u64, reply: ReplyAttr) {
-        match self.attr_for_ino(ino) {
-            Some(attr) => reply.attr(&TTL, &attr),
+        println!("ATTR for node {}", ino);
+        match self.v.nodes.get(ino as usize) {
+            Some(node) => reply.attr(&TTL, &node.attr()),
             None => reply.error(libc::ENOENT),
         }
     }
 
     fn readdir(&mut self, _req: &Request, ino: u64, fh: u64,
-               offset: i64, reply: ReplyDirectory) {
+               offset: i64, mut reply: ReplyDirectory) {
  
-        println!("Reading dir with ino {}", ino);        
-        reply.ok();
+        println!("Reading dir with ino {} offset {}", ino, offset);
+        if offset > 0 {
+            reply.ok();
+            return
+        }
+        let mut full: bool;
+        for node in &self.v.children(ino) {
+            full = reply.add(node.ino, 1, node.kind, node.path.clone());
+            if full {
+                break
+            }
+        }
+        reply.ok()
     }
+
+    fn mkdir(
+        &mut self,
+        _req: &Request<'_>,
+        parent: u64,
+        name: &OsStr,
+        _mode: u32,
+        _umask: u32,
+        reply: ReplyEntry,
+    ) {
+        self.v.create(parent, name.to_str().unwrap(), FileType::Directory);
+        let attr = self.v.lookup(parent, name.to_str().unwrap()).unwrap();
+        reply.entry(&TTL, &attr, 1);
+    }
+
 }
 
 fn main() {
@@ -69,5 +79,5 @@ fn main() {
     let options = vec![MountOption::FSName(String::from("srvfs")),
         MountOption::RW, MountOption::AutoUnmount];
 
-    fuser::mount2(SrvFS{}, mountpoint, &options).unwrap();
+    fuser::mount2(SrvFS::new(), mountpoint, &options).unwrap();
 }
