@@ -1,22 +1,22 @@
-use fuser::{Filesystem, FileAttr, Request, 
-    ReplyEntry, ReplyDirectory, ReplyAttr, FileType, MountOption};
+use fuser::{Filesystem, Request, 
+    ReplyEntry, ReplyDirectory, ReplyAttr, ReplyCreate, FileType, MountOption};
 use std::ffi::OsStr;
-use std::path::Path;
-use std::time::{Duration, UNIX_EPOCH};
+use std::time::Duration;
 use std::fs;
 
 mod vfs;
+use vfs::VFS;
 
 const TTL: Duration = Duration::from_secs(1);
 
 struct SrvFS {
-    v: vfs::VFS,
+    v: VFS,
 }
 
 impl SrvFS {
     fn new() -> SrvFS {
         SrvFS {
-            v: vfs::VFS::new()
+            v: VFS::new()
         }
     }
 }
@@ -38,7 +38,7 @@ impl Filesystem for SrvFS {
         }
     }
 
-    fn readdir(&mut self, _req: &Request, ino: u64, fh: u64,
+    fn readdir(&mut self, _req: &Request, ino: u64, _fh: u64,
                offset: i64, mut reply: ReplyDirectory) {
  
         println!("Reading dir with ino {} offset {}", ino, offset);
@@ -68,6 +68,21 @@ impl Filesystem for SrvFS {
         self.v.create(parent, name.to_str().unwrap(), FileType::Directory);
         let attr = self.v.lookup(parent, name.to_str().unwrap()).unwrap();
         reply.entry(&TTL, &attr, 1);
+    }
+
+    fn create(
+        &mut self,
+        _req: &Request<'_>,
+        parent: u64,
+        name: &OsStr,
+        mode: u32,
+        umask: u32,
+        flags: i32,
+        reply: ReplyCreate,
+    ) {
+        self.v.create(parent, name.to_str().unwrap(), FileType::RegularFile);
+        let attr = self.v.lookup(parent, name.to_str().unwrap()).unwrap();
+        reply.created(&TTL, &attr, 1, 1, 0);
     }
 
 }

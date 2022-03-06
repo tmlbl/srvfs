@@ -55,6 +55,8 @@ impl VFS {
         }
     }
 
+    // TODO: order children for proper offset handling
+    // TODO: remove need for cloning here?
     pub fn children(&self, ino: u64) -> Vec<VNode> {
         let node = self.nodes.get(ino as usize).unwrap();
         let mut v = Vec::new();
@@ -110,13 +112,23 @@ mod tests {
     use super::*;
 
     #[test]
-    fn it_appends_and_looks_up() {
+    fn it_creates_regular_files() {
         let mut fs = VFS::new();
-        fs.create(0, "foo", FileType::RegularFile);
-        let foo = fs.lookup(0, "foo");
+        fs.create(1, "foo", FileType::RegularFile);
+        let foo = fs.lookup(1, "foo");
         assert!(foo.is_some());
         let foo = foo.unwrap();
         assert_eq!(foo.ino, 2);
         assert_eq!(foo.perm, 0o644);
+    }
+
+    #[test]
+    fn it_creates_nested_dirs() {
+        let mut fs = VFS::new();
+        fs.create(1, "foo", FileType::Directory);
+        let foo = fs.lookup(1, "foo").unwrap();
+        fs.create(foo.ino, "bar", FileType::Directory);
+        let bar = fs.lookup(foo.ino, "bar").unwrap();
+        assert_eq!(bar.kind, FileType::Directory);
     }
 }
