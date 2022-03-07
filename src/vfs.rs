@@ -12,13 +12,15 @@ impl VFS {
     pub fn new() -> VFS {
         let empty = VNode {
             ino: 0,
+            name: String::from(""),
             path: String::from(""),
             kind: FileType::Symlink,
             children: HashMap::new()
         };
         let root = VNode {
             ino: 1,
-            path: String::from("/"),
+            name: String::from(""),
+            path: String::from(""),
             kind: FileType::Directory,
             children: HashMap::new()
         };
@@ -27,17 +29,21 @@ impl VFS {
         }
     }
 
-    pub fn create(&mut self, parent: u64, path: &str, kind: FileType) {
+    pub fn create(&mut self, parent: u64, name: &str, kind: FileType) {
         let ino = self.nodes.len() as u64;
-        let node = VNode {
+        let parent = self.nodes.get_mut(parent as usize).unwrap();
+        let mut node = VNode {
             ino,
-            path: String::from(path),
+            name: String::from(name),
+            path: parent.path.clone(),
             kind,
             children: HashMap::new()
         };
+        node.path.push_str("/");
+        node.path.push_str(name);
+        println!("Created node with path: {}", node.path);
+        parent.children.insert(name.to_string(), ino);
         self.nodes.push(node);
-        let parent = self.nodes.get_mut(parent as usize).unwrap();
-        parent.children.insert(path.to_string(), ino);
     }
 
     pub fn lookup(&self, parent: u64, path: &str) -> Option<FileAttr> {
@@ -64,7 +70,8 @@ impl VFS {
             let n = self.nodes.get(*i as usize).unwrap();
             v.push(VNode {
                 ino: n.ino,
-                path: name.clone(),
+                name: name.clone(),
+                path: node.path.clone(),
                 kind: n.kind,
                 children: HashMap::new(),
             })
@@ -75,6 +82,7 @@ impl VFS {
 
 pub struct VNode {
     pub ino: u64,
+    pub name: String,
     pub path: String,
     pub kind: FileType,
     children: HashMap<String, u64>,
@@ -89,8 +97,8 @@ impl VNode {
         };
         FileAttr {
             ino: self.ino,
-            size: 0,
-            blocks: 0,
+            size: 4096,
+            blocks: 1,
             atime: UNIX_EPOCH,
             mtime: UNIX_EPOCH,
             ctime: UNIX_EPOCH,

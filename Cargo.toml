@@ -6,6 +6,8 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-fuser = "0.10.0"
+# fuser = "0.10.0"
+fuser = { path = "../oss/fuser" }
 libc = "0.2.117"
 tokio = { version = "1", features = ["full"] }
+nats = "0.18.1"
