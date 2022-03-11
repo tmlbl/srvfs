@@ -8,8 +8,6 @@ use std::collections::HashMap;
 
 use crate::vfs::VFS;
 
-const HELLO_TXT_CONTENT: &str = "Hello 0hg843hg08uh World!\n";
-
 const TTL: Duration = Duration::from_secs(1);
 
 pub struct SrvFS {
@@ -38,7 +36,6 @@ impl SrvFS {
 
 impl Filesystem for SrvFS {
     fn lookup(&mut self, _req: &Request, parent: u64, name: &OsStr, reply: ReplyEntry) {
-        println!("LOOKUP {}", name.to_str().unwrap());
         match self.v.lookup(parent, name.to_str().unwrap()) {
             None => reply.error(libc::ENOENT),
             Some(attr) => reply.entry(&TTL, &attr, 1),
@@ -46,7 +43,6 @@ impl Filesystem for SrvFS {
     }
 
     fn getattr(&mut self, _req: &Request, ino: u64, reply: ReplyAttr) {
-        println!("ATTR for node {}", ino);
         match self.v.nodes.get(ino as usize) {
             Some(node) => reply.attr(&TTL, &node.attr()),
             None => reply.error(libc::ENOENT),
@@ -56,7 +52,6 @@ impl Filesystem for SrvFS {
     fn readdir(&mut self, _req: &Request, ino: u64, _fh: u64,
                offset: i64, mut reply: ReplyDirectory) {
  
-        println!("Reading dir with ino {} offset {}", ino, offset);
         if offset > 0 {
             reply.ok();
             return
