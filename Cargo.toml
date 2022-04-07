@@ -8,5 +8,6 @@ edition = "2021"
 [dependencies]
 fuser = "0.10.0"
 libc = "0.2.117"
-tokio = { version = "1", features = ["full"] }
 nats = "0.18.1"
+structopt = "0.3"
+env_logger = "0.9"
