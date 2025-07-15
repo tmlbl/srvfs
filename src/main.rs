@@ -10,10 +10,11 @@ struct Options {
     nats_addr: String,
 }
 
-fn main() {
+#[tokio::main]
+async fn main() {
     let opts = Options::from_args();
 
     println!("Connecting to NATS at {}...", opts.nats_addr);
-    let nc = nats::connect(&opts.nats_addr).unwrap();
-    srvfs::mount("/tmp/srvfs", nc);
+    let nc = async_nats::connect(&opts.nats_addr).await.unwrap();
+    srvfs::mount("/tmp/srvfs", nc).await;
 }

@@ -4,7 +4,7 @@ use fuser::{Filesystem, Request,
 use std::ffi::OsStr;
 use std::time::Duration;
 use std::fs;
-use std::collections::HashMap;
+use futures_util::stream::StreamExt;
 
 use crate::vfs::VFS;
 
@@ -12,25 +12,17 @@ const TTL: Duration = Duration::from_secs(1);
 
 pub struct SrvFS {
     v: VFS,
-    nc: nats::Connection,
-    subs: HashMap<String, nats::Subscription>
+    nc: async_nats::Client,
+    runtime: tokio::runtime::Runtime,
 }
 
 impl SrvFS {
-    fn new(nc: nats::Connection) -> SrvFS {
+    fn new(nc: async_nats::Client) -> SrvFS {
         SrvFS {
             v: VFS::new(),
             nc,
-            subs: HashMap::new(),
+            runtime: tokio::runtime::Runtime::new().unwrap(),
         }
-    }
-
-    fn get_sub(&mut self, subject: &str) -> Option<&nats::Subscription> {
-        if !self.subs.contains_key(subject) {
-            let sub = self.nc.subscribe(subject).unwrap();
-            self.subs.insert(subject.to_string(), sub);
-        }
-        return self.subs.get(subject);
     }
 }
 
@@ -50,9 +42,9 @@ impl Filesystem for SrvFS {
     }
 
     fn readdir(&mut self, _req: &Request, ino: u64, _fh: u64,
-               offset: i64, mut reply: ReplyDirectory) {
+               _offset: i64, mut reply: ReplyDirectory) {
  
-        if offset > 0 {
+        if _offset > 0 {
             reply.ok();
             return
         }
@@ -136,7 +128,12 @@ impl Filesystem for SrvFS {
         match self.v.nodes.get(ino as usize) {
             Some(node) => {
                 println!("Publishing message with subject: {}", node.path);
-                self.nc.publish(node.path.as_str(), data).unwrap();
+                let path = node.path.clone();
+                let data_clone = data.to_vec();
+                let nc = self.nc.clone();
+                self.runtime.block_on(async move {
+                    nc.publish(path, data_clone.into()).await.unwrap();
+                });
                 reply.written(data.len() as u32);
             }
             None => reply.error(libc::ENOENT),
@@ -148,22 +145,28 @@ impl Filesystem for SrvFS {
         _req: &Request<'_>,
         ino: u64,
         _fh: u64,
-        offset: i64,
-        size: u32,
+        _offset: i64,
+        _size: u32,
         _flags: i32,
         _lock_owner: Option<u64>,
         reply: ReplyData,
     ) {
         let node = self.v.nodes.get(ino as usize).unwrap();
         let path = node.path.clone();
-        let sub = self.get_sub(path.as_str()).unwrap();
-        let msg = sub.messages().next().unwrap();
+        let nc = self.nc.clone();
 
-        reply.data(&msg.data);
+        self.runtime.block_on(async move {
+            let mut sub = nc.subscribe(path).await.unwrap();
+            if let Some(msg) = sub.next().await {
+                reply.data(&msg.payload);
+            } else {
+                reply.data(&[]);
+            }
+        });
     }
 }
 
-pub fn mount(mountpoint: &str, nc: nats::Connection) {
+pub async fn mount(mountpoint: &str, nc: async_nats::Client) {
     fs::create_dir_all(mountpoint).unwrap();
 
     let options = vec![MountOption::FSName(String::from("srvfs")),
